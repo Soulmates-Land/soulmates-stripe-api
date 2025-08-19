@@ -1,7 +1,6 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 export default async function handler(req, res) {
-  // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -16,40 +15,26 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { customer_id, amount = 2500 } = req.body; // €25.00 in cents
+    const { name, email, city, intentions, instagram } = req.body;
     
-    if (!customer_id) {
-      return res.status(400).json({ error: 'Customer ID is required' });
-    }
-
-    // Get customer's saved payment method
-    const paymentMethods = await stripe.paymentMethods.list({
-      customer: customer_id,
-      type: 'card',
+    const customer = await stripe.customers.create({
+      name: name,
+      email: email,
+      metadata: { city: city || '', intentions: intentions || '', instagram: instagram || '' }
     });
 
-    if (paymentMethods.data.length === 0) {
-      throw new Error('No saved payment method found for this customer');
-    }
-
-    // Create and confirm payment
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: amount,
-      currency: 'eur',
-      customer: customer_id,
-      payment_method: paymentMethods.data[0].id,
-      confirm: true,
-      off_session: true,
-      description: 'Soulmates Founding Membership',
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customer.id,
+      usage: 'off_session',
+      payment_method_types: ['card'],
     });
 
-    res.status(200).json({ 
-      success: true, 
-      payment_intent: paymentIntent.id,
-      amount_charged: amount 
+    res.status(200).json({
+      client_secret: setupIntent.client_secret,
+      customer_id: customer.id
     });
+
   } catch (error) {
-    console.error('Charge Error:', error);
     res.status(500).json({ error: error.message });
   }
 }
